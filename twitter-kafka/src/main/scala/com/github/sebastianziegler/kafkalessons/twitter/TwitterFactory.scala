@@ -13,7 +13,7 @@ import scala.jdk.CollectionConverters._
 
 object TwitterFactory {
   def getClient(topics: List[String], msgQueue: BlockingQueue[String]): Client = {
-    val config = ConfigFactory.load("credentials.conf")
+    val config = ConfigFactory.load("credentials.conf").getConfig("twitter")
     val hosebirdHosts = new HttpHosts(Constants.STREAM_HOST)
     val hosebirdEndpoint = new StatusesFilterEndpoint()
     val auth = new OAuth1(

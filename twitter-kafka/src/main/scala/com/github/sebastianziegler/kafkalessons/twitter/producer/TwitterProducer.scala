@@ -16,15 +16,15 @@ class TwitterProducer {
   private val msgQueue = new LinkedBlockingQueue[String](100000)
   private val twitterClient = TwitterFactory.getClient(List("bitcoin"), msgQueue)
 
-  Runtime.getRuntime.addShutdownHook(new Thread {
-    logger.info("Finalizing jobs")
-    twitterClient.stop()
-    producer.flush()
-    producer.close()
-  })
-
   def harvestTweets(): Unit = {
     twitterClient.connect()
+
+    Runtime.getRuntime.addShutdownHook(new Thread {
+      logger.info("Finalizing jobs")
+      twitterClient.stop()
+      producer.flush()
+      producer.close()
+    })
 
     while (!twitterClient.isDone){
       val msg = msgQueue.take()
