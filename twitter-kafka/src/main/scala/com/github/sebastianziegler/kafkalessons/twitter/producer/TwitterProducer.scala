@@ -4,27 +4,21 @@ import java.util.Properties
 import java.util.concurrent.LinkedBlockingQueue
 
 import com.github.sebastianziegler.kafkalessons.twitter.TwitterFactory
+import com.twitter.hbc.core.Client
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord, RecordMetadata}
 import org.apache.kafka.common.serialization.StringSerializer
 import org.slf4j.LoggerFactory
 
-class TwitterProducer {
-  val properties = getProperties()
+class TwitterProducer(
+                       producer: KafkaProducer[String, String],
+                       msgQueue: LinkedBlockingQueue[String],
+                       twitterClient: Client
+                     ) {
   private val logger = LoggerFactory.getLogger(classOf[TwitterProducer])
   private val TOPIC_NAME = "twitter-topic"
-  private val producer = new KafkaProducer[String, String](properties)
-  private val msgQueue = new LinkedBlockingQueue[String](100000)
-  private val twitterClient = TwitterFactory.getClient(List("bitcoin"), msgQueue)
 
   def harvestTweets(): Unit = {
     twitterClient.connect()
-
-    Runtime.getRuntime.addShutdownHook(new Thread {
-      logger.info("Finalizing jobs")
-      twitterClient.stop()
-      producer.flush()
-      producer.close()
-    })
 
     while (!twitterClient.isDone){
       val msg = msgQueue.take()
@@ -40,6 +34,24 @@ class TwitterProducer {
       })
     }
   }
+}
+
+object ProducerApp extends App {
+  val properties = getProperties()
+  private val logger = LoggerFactory.getLogger(classOf[TwitterProducer])
+  private val kafkaClient = new KafkaProducer[String, String](properties)
+  private val msgQueue = new LinkedBlockingQueue[String](100000)
+  private val twitterClient = TwitterFactory.getClient(List("bitcoin"), msgQueue)
+  val producer = new TwitterProducer(kafkaClient, msgQueue, twitterClient)
+
+  sys.addShutdownHook{
+    logger.info("Finalizing jobs")
+    twitterClient.stop()
+    kafkaClient.flush()
+    kafkaClient.close()
+  }
+
+  producer.harvestTweets()
 
   def getProperties(): Properties = {
     val properties = new Properties()
@@ -62,10 +74,4 @@ class TwitterProducer {
 
     properties
   }
-}
-
-object ProducerApp extends App {
-  val producer = new TwitterProducer
-
-  producer.harvestTweets()
 }
