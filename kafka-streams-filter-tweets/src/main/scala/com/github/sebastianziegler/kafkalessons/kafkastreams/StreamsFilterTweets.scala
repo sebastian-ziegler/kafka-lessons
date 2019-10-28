@@ -15,12 +15,14 @@ class StreamsFilterTweets {
   }
 
   def pullTweets(): Unit = {
+    logger.info("Initializing properties")
     val properties = new Properties()
     properties.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "127.0.0.1:9092")
     properties.put(StreamsConfig.APPLICATION_ID_CONFIG, "demo-kafka-streams")
     properties.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, classOf[Serdes.StringSerde].getName)
     properties.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, classOf[Serdes.StringSerde].getName)
 
+    logger.info("Creating stream")
     val streamsBuilder = new StreamsBuilder()
 
     val inputTopic: KStream[String, String] = streamsBuilder.stream("twitter-topic")
@@ -30,8 +32,15 @@ class StreamsFilterTweets {
 
     filteredStreams.to("important_tweets")
 
+    logger.info("Creating client")
     val kafkaStreams = new KafkaStreams(streamsBuilder.build(), properties)
 
+    logger.info("Starting")
     kafkaStreams.start()
   }
+}
+
+object StreamsFilterTweets extends App {
+  def streamsFilterTweets = new StreamsFilterTweets
+  streamsFilterTweets.pullTweets()
 }
