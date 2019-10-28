@@ -7,6 +7,7 @@ import com.github.sebastianziegler.kafkalessons.elasticsearch.ElasticSearchFacto
 import com.google.gson.JsonParser
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecords, KafkaConsumer}
 import org.apache.kafka.common.serialization.StringDeserializer
+import org.elasticsearch.action.bulk.{BulkRequest, BulkResponse}
 import org.elasticsearch.action.index.IndexRequest
 import org.elasticsearch.client.{RequestOptions, RestHighLevelClient}
 import org.elasticsearch.common.xcontent.XContentType
@@ -30,15 +31,23 @@ class ConsumerElasticsearch(
 
     while (true) {
       val records: ConsumerRecords[String, String] = kafkaConsumer.poll(Duration.ofSeconds(1))
+      logger.info(s"Received ${records.count()} records")
+
+      val bulkRequest: BulkRequest = new BulkRequest()
 
       records.records(TOPIC_NAME).forEach { record =>
         logger.info(s"Message received: ${record.key()}|${record.value()}")
         val twitterId = extractIdFromTweet(record.value())
         val indexRequest = new IndexRequest("twitter", "tweets", twitterId).source(record.value, XContentType.JSON)
-        val idxResponse = elasticClient.index(indexRequest, RequestOptions.DEFAULT)
 
-        logger.info(s"Inserting into elasticSearch id is: ${idxResponse.getId}")
+        bulkRequest.add(indexRequest)
       }
+
+      val bulkResponse: BulkResponse = elasticClient.bulk(bulkRequest, RequestOptions.DEFAULT)
+
+      logger.info("Committing offsets")
+      kafkaConsumer.commitSync()
+      logger.info("Offsets committed")
     }
 
     kafkaConsumer.close()
@@ -70,6 +79,8 @@ object ConsumerApp extends App {
     properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, classOf[StringDeserializer].getName)
     properties.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID)
     properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+    properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
+    properties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "100")
 
     properties
   }
