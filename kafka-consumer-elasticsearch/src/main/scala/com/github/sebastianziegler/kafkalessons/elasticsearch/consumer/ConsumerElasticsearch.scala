@@ -21,8 +21,8 @@ class ConsumerElasticsearch(
   private val logger = LoggerFactory.getLogger(classOf[ConsumerElasticsearch])
   private val TOPIC_NAME = "twitter-topic"
 
-  private def extractIdFromTweet(str: String): String = {
-    JsonParser.parseString(str).getAsJsonObject.get("id_str").getAsString
+  private def extractIdFromTweet(str: String): Option[String] = {
+    Option(JsonParser.parseString(str).getAsJsonObject.get("id_str")).map(_.getAsString)
   }
 
   def consumeTweets(): Unit = {
@@ -31,23 +31,27 @@ class ConsumerElasticsearch(
 
     while (true) {
       val records: ConsumerRecords[String, String] = kafkaConsumer.poll(Duration.ofSeconds(1))
-      logger.info(s"Received ${records.count()} records")
+      val recordsCount = records.count()
+      logger.info(s"Received $recordsCount records")
 
       val bulkRequest: BulkRequest = new BulkRequest()
 
       records.records(TOPIC_NAME).forEach { record =>
         logger.info(s"Message received: ${record.key()}|${record.value()}")
-        val twitterId = extractIdFromTweet(record.value())
-        val indexRequest = new IndexRequest("twitter", "tweets", twitterId).source(record.value, XContentType.JSON)
+        extractIdFromTweet(record.value()).foreach{ tweetId =>
+          val indexRequest = new IndexRequest("twitter", "tweets", tweetId).source(record.value, XContentType.JSON)
 
-        bulkRequest.add(indexRequest)
+          bulkRequest.add(indexRequest)
+        }
       }
 
-      val bulkResponse: BulkResponse = elasticClient.bulk(bulkRequest, RequestOptions.DEFAULT)
+      if (recordsCount > 0) {
+        val bulkResponse: BulkResponse = elasticClient.bulk(bulkRequest, RequestOptions.DEFAULT)
 
-      logger.info("Committing offsets")
-      kafkaConsumer.commitSync()
-      logger.info("Offsets committed")
+        logger.info("Committing offsets")
+        kafkaConsumer.commitSync()
+        logger.info("Offsets committed")
+      }
     }
 
     kafkaConsumer.close()
