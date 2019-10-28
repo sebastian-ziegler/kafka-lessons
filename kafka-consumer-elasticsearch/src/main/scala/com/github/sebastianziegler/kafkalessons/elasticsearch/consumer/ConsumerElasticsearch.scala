@@ -4,6 +4,7 @@ import java.time.Duration
 import java.util.Properties
 
 import com.github.sebastianziegler.kafkalessons.elasticsearch.ElasticSearchFactory
+import com.google.gson.JsonParser
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecords, KafkaConsumer}
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.elasticsearch.action.index.IndexRequest
@@ -19,6 +20,10 @@ class ConsumerElasticsearch(
   private val logger = LoggerFactory.getLogger(classOf[ConsumerElasticsearch])
   private val TOPIC_NAME = "twitter-topic"
 
+  private def extractIdFromTweet(str: String): String = {
+    JsonParser.parseString(str).getAsJsonObject.get("id_str").getAsString
+  }
+
   def consumeTweets(): Unit = {
 
     kafkaConsumer.subscribe(List(TOPIC_NAME).asJava)
@@ -28,7 +33,8 @@ class ConsumerElasticsearch(
 
       records.records(TOPIC_NAME).forEach { record =>
         logger.info(s"Message received: ${record.key()}|${record.value()}")
-        val indexRequest = new IndexRequest("twitter", "tweets").source(record.value, XContentType.JSON)
+        val twitterId = extractIdFromTweet(record.value())
+        val indexRequest = new IndexRequest("twitter", "tweets", twitterId).source(record.value, XContentType.JSON)
         val idxResponse = elasticClient.index(indexRequest, RequestOptions.DEFAULT)
 
         logger.info(s"Inserting into elasticSearch id is: ${idxResponse.getId}")
